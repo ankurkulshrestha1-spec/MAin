@@ -1,0 +1,15 @@
+node_modules/
+dist/
+build/
+*.log
+.env
+.env.local
+# Patterns with a slash anchor to this file's directory, so match at any depth.
+**/data/*.db
+**/data/*.db-*
+**/data/last-scrape.html
+.expo/
+.expo-shared/
+web-build/
+*.tsbuildinfo
+.DS_Store
