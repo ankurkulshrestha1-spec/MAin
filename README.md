@@ -13,6 +13,10 @@ Two parts:
 The app is a client of the server, so the server has to be running and reachable
 from the phone.
 
+`tools/` holds standalone analysis scripts that are not part of the app —
+currently `tools/rsi-divergence/`, a weekly RSI divergence scanner for the Nifty
+500. See its own README.
+
 ## What it does
 
 **My Funds** — only the funds you've flagged as yours, with a book-level roll-up:
