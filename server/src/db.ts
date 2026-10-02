@@ -1,4 +1,4 @@
-import Database from 'better-sqlite3';
+import { DatabaseSync, type StatementSync } from 'node:sqlite';
 import fs from 'node:fs';
 import path from 'node:path';
 import { config } from './config.js';
@@ -6,7 +6,100 @@ import { FUND_CATALOG, BENCHMARK_CATALOG } from './catalog.js';
 
 fs.mkdirSync(path.dirname(config.databasePath), { recursive: true });
 
-export const db = new Database(config.databasePath);
+/**
+ * Thin wrapper over Node's built-in SQLite.
+ *
+ * We use `node:sqlite` rather than better-sqlite3 so that `npm install`
+ * never has to compile a native addon — that build is the step most likely
+ * to fail on a constrained machine (an Android phone under Termux, a locked
+ * down work laptop), and SQLite itself is identical either way.
+ *
+ * The wrapper adds the two better-sqlite3 conveniences the codebase relies on
+ * and node:sqlite does not provide: `pragma()` and `transaction()`.
+ */
+/** Result of a write, with lastInsertRowid narrowed to a plain number. */
+export interface RunResult {
+  changes: number;
+  lastInsertRowid: number;
+}
+
+/**
+ * A prepared statement. Rows come back as `unknown` so each call site states
+ * the shape it expects, the same way the better-sqlite3 version did.
+ */
+export interface Statement {
+  run(...params: unknown[]): RunResult;
+  get<T = unknown>(...params: unknown[]): T | undefined;
+  all<T = unknown>(...params: unknown[]): T[];
+}
+
+type RawParams = Parameters<StatementSync['all']>;
+
+function wrapStatement(statement: StatementSync): Statement {
+  return {
+    run(...params) {
+      const result = statement.run(...(params as RawParams));
+      return {
+        changes: Number(result.changes),
+        // SQLite hands back a bigint past 2^53; these tables will never get
+        // there, and a plain number keeps arithmetic at call sites simple.
+        lastInsertRowid: Number(result.lastInsertRowid),
+      };
+    },
+    get<T>(...params: unknown[]) {
+      return statement.get(...(params as RawParams)) as T | undefined;
+    },
+    all<T>(...params: unknown[]) {
+      return statement.all(...(params as RawParams)) as T[];
+    },
+  };
+}
+
+class Db {
+  readonly raw: DatabaseSync;
+
+  constructor(filename: string) {
+    this.raw = new DatabaseSync(filename);
+  }
+
+  exec(sql: string): void {
+    this.raw.exec(sql);
+  }
+
+  prepare(sql: string): Statement {
+    return wrapStatement(this.raw.prepare(sql));
+  }
+
+  pragma(statement: string): void {
+    this.raw.exec(`PRAGMA ${statement}`);
+  }
+
+  /**
+   * Runs `fn` inside a transaction, matching better-sqlite3's calling
+   * convention: this returns a function, so callers write `db.transaction(fn)()`.
+   * Nested calls reuse the outer transaction, since SQLite has no nested BEGIN.
+   */
+  transaction<T extends (...args: never[]) => unknown>(fn: T): T {
+    let depth = 0;
+    return ((...args: Parameters<T>) => {
+      if (depth > 0) return fn(...args);
+      depth++;
+      this.raw.exec('BEGIN');
+      try {
+        const result = fn(...args);
+        this.raw.exec('COMMIT');
+        return result;
+      } catch (error) {
+        this.raw.exec('ROLLBACK');
+        throw error;
+      } finally {
+        depth--;
+      }
+    }) as T;
+  }
+}
+
+export const db = new Db(config.databasePath);
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 

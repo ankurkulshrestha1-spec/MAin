@@ -34,6 +34,9 @@ the window so a ₹10 index fund and a ₹70 equity fund are directly comparable
 
 ## Running it
 
+Needs **Node 22.5 or newer** — the server uses Node's built-in SQLite, so
+nothing has to compile during `npm install`. Check with `node -v`.
+
 ### Server
 
 ```bash
@@ -63,6 +66,36 @@ npx expo start
 Scan the QR code with Expo Go. Then open **Settings** in the app and set the
 server address to your computer's LAN IP — `http://192.168.x.x:4000`.
 `localhost` only resolves on the iOS simulator and on web, not on a real phone.
+
+### Running it all on an Android phone, with no computer
+
+Termux gives you a Linux shell on Android, which is enough to run both halves.
+Because the server and the app are then on the same device, `localhost` works
+and you can skip the LAN IP step entirely.
+
+Install [Termux from F-Droid](https://f-droid.org/packages/com.termux/) — not the
+Play Store build, which is no longer maintained — then:
+
+```bash
+pkg update && pkg upgrade
+pkg install nodejs git
+git clone https://github.com/ankurkulshrestha1-spec/MAin.git
+cd MAin && git checkout claude/pnb-metlife-fund-tracker-71j43x
+cd server && npm install && cp .env.example .env && npm run seed && npm run dev
+```
+
+Then open a second Termux session (swipe in from the left → New session):
+
+```bash
+cd MAin/mobile && npm install && npx expo start
+```
+
+Install Expo Go from the Play Store and open the project. Leave the app's server
+address at its `http://localhost:4000` default.
+
+Note that the daily scrape only runs while Termux is running, so NAVs update when
+you open it rather than on a schedule. Host the server somewhere always-on if you
+want unattended daily updates.
 
 ## Where NAVs come from
 
